@@ -1,0 +1,70 @@
+# Build output
+bin/
+obj/
+publish/
+dist/
+artifacts/
+out/
+Release/
+Debug/
+
+# Installer and portable release artifacts
+*.exe
+*.msi
+*.msix
+*.appx
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.iso
+
+# .NET / Visual Studio
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+*.nupkg
+*.snupkg
+
+# Local app data, logs, crash dumps
+*.log
+*.tmp
+*.temp
+*.bak
+*.dmp
+*.mdmp
+events.log
+settings.json
+
+# Secrets, signing keys, certificates
+.env
+.env.*
+!.env.example
+secrets.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+*.jks
+*.keystore
+*.cer
+*.crt
+*.csr
+
+# Inno Setup generated leftovers
+Output/
+*.iss~
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

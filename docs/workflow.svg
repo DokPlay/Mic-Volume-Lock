@@ -1,0 +1,56 @@
+<svg width="980" height="230" viewBox="0 0 980 230" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Mic Volume Lock workflow animation</title>
+  <desc id="desc">Animated workflow from select microphone to lock volume and stay in tray.</desc>
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="980" y2="230" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFD"/>
+      <stop offset="1" stop-color="#EAF5F7"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#0E766E"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#0B2130" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="980" height="230" rx="28" fill="url(#card)"/>
+  <path d="M130 116H850" stroke="#C7D9E2" stroke-width="4" stroke-linecap="round"/>
+  <path d="M130 116H850" stroke="url(#accent)" stroke-width="4" stroke-linecap="round" stroke-dasharray="90 740">
+    <animate attributeName="stroke-dashoffset" values="0;-830" dur="5.5s" repeatCount="indefinite"/>
+  </path>
+  <g filter="url(#shadow)">
+    <rect x="54" y="58" width="170" height="116" rx="22" fill="white" stroke="#D4E3EA"/>
+    <text x="86" y="96" fill="#0F2638" font-family="Segoe UI, Arial" font-size="18" font-weight="700">1. Select mic</text>
+    <text x="84" y="128" fill="#617088" font-family="Segoe UI, Arial" font-size="15">Choose endpoint</text>
+    <circle cx="139" cy="151" r="9" fill="#0E766E"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="290" y="58" width="170" height="116" rx="22" fill="white" stroke="#D4E3EA"/>
+    <text x="321" y="96" fill="#0F2638" font-family="Segoe UI, Arial" font-size="18" font-weight="700">2. Set level</text>
+    <text x="324" y="128" fill="#617088" font-family="Segoe UI, Arial" font-size="15">85%, 90%, 100%</text>
+    <rect x="324" y="146" width="96" height="9" rx="5" fill="#D8E8EE"/>
+    <rect x="324" y="146" width="72" height="9" rx="5" fill="#0E766E">
+      <animate attributeName="width" values="42;96;72" dur="4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="526" y="58" width="170" height="116" rx="22" fill="white" stroke="#D4E3EA"/>
+    <text x="558" y="96" fill="#0F2638" font-family="Segoe UI, Arial" font-size="18" font-weight="700">3. Lock</text>
+    <text x="558" y="128" fill="#617088" font-family="Segoe UI, Arial" font-size="15">Auto restore</text>
+    <path d="M600 152V139C600 128 608 120 619 120C630 120 638 128 638 139V152" stroke="#0E766E" stroke-width="7" stroke-linecap="round"/>
+    <rect x="592" y="149" width="54" height="38" rx="10" fill="#0E766E">
+      <animate attributeName="opacity" values="0.8;1;0.8" dur="2s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="762" y="58" width="170" height="116" rx="22" fill="white" stroke="#D4E3EA"/>
+    <text x="797" y="96" fill="#0F2638" font-family="Segoe UI, Arial" font-size="18" font-weight="700">4. Tray</text>
+    <text x="791" y="128" fill="#617088" font-family="Segoe UI, Arial" font-size="15">Runs quietly</text>
+    <circle cx="847" cy="153" r="22" fill="#E1F7F4" stroke="#0E766E" stroke-width="4"/>
+    <circle cx="847" cy="153" r="7" fill="#0E766E">
+      <animate attributeName="r" values="6;11;6" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;0.45;1" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

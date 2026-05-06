@@ -1,0 +1,74 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Mic Volume Lock animated project banner</title>
+  <desc id="desc">Animated microphone lock banner showing a stable volume line.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07111D"/>
+      <stop offset="0.48" stop-color="#102236"/>
+      <stop offset="1" stop-color="#062D35"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(890 166) rotate(130) scale(410 250)">
+      <stop stop-color="#42F3E5" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#42F3E5" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="620" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="waveClip">
+      <rect x="460" y="232" width="590" height="92" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="420" rx="34" fill="url(#bg)"/>
+  <rect width="1200" height="420" rx="34" fill="url(#glow)"/>
+  <path d="M-45 346C147 261 267 383 461 290C622 213 729 236 884 160C1016 95 1110 112 1251 37" stroke="#2DD4BF" stroke-opacity="0.14" stroke-width="88"/>
+  <path d="M-38 351C156 265 282 371 470 284C624 213 737 232 892 154C1017 91 1109 111 1244 44" stroke="#7DD3FC" stroke-opacity="0.16" stroke-width="2"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="84" y="70" width="274" height="274" rx="58" fill="#0E1A2A" stroke="#26465E" stroke-width="2"/>
+    <rect x="112" y="96" width="218" height="218" rx="44" fill="#132941"/>
+    <path d="M221 117C185 117 158 146 158 181V216C158 252 185 280 221 280C257 280 284 252 284 216V181C284 146 257 117 221 117Z" fill="#0A101A" stroke="#89F8F0" stroke-width="4"/>
+    <path d="M190 179H252M190 203H252M194 227H248" stroke="#89F8F0" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round"/>
+    <path d="M143 205V221C143 263 176 299 221 299C266 299 299 263 299 221V205" stroke="#D9FBFF" stroke-opacity="0.75" stroke-width="10" stroke-linecap="round"/>
+    <path d="M221 300V326M183 326H259" stroke="#D9FBFF" stroke-opacity="0.75" stroke-width="10" stroke-linecap="round"/>
+    <g filter="url(#cyanGlow)">
+      <circle cx="221" cy="207" r="15" fill="#38F5E4">
+        <animate attributeName="r" values="13;18;13" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.75;1;0.75" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+    <rect x="260" y="238" width="76" height="76" rx="17" fill="#0A121D" stroke="#9AF8F1" stroke-width="4"/>
+    <path d="M282 238V218C282 199 296 184 315 184C334 184 348 199 348 218V238" stroke="#D9FBFF" stroke-width="11" stroke-linecap="round"/>
+    <path d="M298 275L291 294H315L308 275C316 269 313 255 303 255C293 255 290 269 298 275Z" fill="#38F5E4"/>
+  </g>
+
+  <text x="430" y="118" fill="#F7FBFF" font-family="Segoe UI, Arial, sans-serif" font-size="48" font-weight="700">Mic Volume Lock</text>
+  <text x="432" y="160" fill="#A7BED4" font-family="Segoe UI, Arial, sans-serif" font-size="22">Keep your microphone level stable on Windows 10/11.</text>
+
+  <g transform="translate(430 195)">
+    <rect width="706" height="154" rx="24" fill="#0C1725" stroke="#223B55"/>
+    <text x="30" y="48" fill="#7DD3FC" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="700">LIVE VOLUME GUARD</text>
+    <text x="30" y="82" fill="#EAF6FF" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">Discord / Zoom / Windows changed input gain?</text>
+    <text x="30" y="116" fill="#A7BED4" font-family="Segoe UI, Arial, sans-serif" font-size="19">Mic Volume Lock restores your selected target level automatically.</text>
+    <g clip-path="url(#waveClip)">
+      <path d="M470 279C495 249 523 249 548 279C573 309 601 309 626 279C651 249 679 249 704 279C729 309 757 309 782 279C807 249 835 249 860 279C885 309 913 309 938 279C963 249 991 249 1016 279C1041 309 1069 309 1094 279" stroke="url(#line)" stroke-width="7" stroke-linecap="round" filter="url(#cyanGlow)">
+        <animateTransform attributeName="transform" type="translate" values="0 0;-156 0;0 0" dur="4s" repeatCount="indefinite"/>
+      </path>
+    </g>
+    <line x1="460" y1="279" x2="1050" y2="279" stroke="#2DD4BF" stroke-opacity="0.28" stroke-width="2" stroke-dasharray="8 8"/>
+    <circle cx="1007" cy="279" r="9" fill="#2DD4BF" filter="url(#cyanGlow)">
+      <animate attributeName="opacity" values="0.45;1;0.45" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
