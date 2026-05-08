@@ -262,8 +262,7 @@
                             <TextBlock x:Name="ProcessLabelText" Style="{StaticResource MutedText}" Margin="0,0,0,6" />
                             <StackPanel Orientation="Horizontal">
                                 <ComboBox x:Name="ProcessCombo"
-                                          Width="280"
-                                          DisplayMemberPath="ProcessName" />
+                                          Width="280" />
                                 <Button x:Name="RefreshProcessesButton"
                                         Style="{StaticResource SecondaryButton}"
                                         Margin="12,0,0,0"

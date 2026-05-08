@@ -38,7 +38,7 @@ Mic Volume Lock solves the practical part of the problem:
 - **Light and dark themes** with an in-app theme switcher.
 - **Profiles** for quick presets such as Gaming, Work, Streaming, and Quiet room.
 - **Global hotkeys** for toggling protection and changing volume quickly.
-- **Diagnostics** with hints for Discord, Zoom, Steam/games, Windows settings, NVIDIA Broadcast / RTX Voice, and AMD Noise Suppression.
+- **Process exclusions and troubleshooting hints** for Discord, Zoom, Steam/games, Windows settings, NVIDIA Broadcast / RTX Voice, and AMD Noise Suppression.
 - **Support logs** that can be copied or exported when troubleshooting.
 - **Multilingual interface** with English, Russian, Spanish, Portuguese Brazil, German, French, Italian, Polish, Turkish, Chinese Simplified, Japanese, Korean, Dutch, Indonesian, Vietnamese, Czech, Arabic, Hindi, and Romanian.
 - **Classic Windows installer** built with Inno Setup.
@@ -72,11 +72,11 @@ For the most stable result:
 1. Enable **Run Mic Volume Lock at Windows startup**.
 2. Enable **Follow default communications microphone** if you often reconnect headsets or USB microphones.
 3. Keep notifications enabled at first, then disable them if you prefer silence.
-4. Check the Diagnostics tab if the volume keeps changing often.
+4. Check the Exclusions tab if the volume keeps changing often.
 
-## Diagnostics: what may change microphone volume
+## Exclusions: what may change microphone volume
 
-Mic Volume Lock cannot always identify the exact process that changed the microphone level because Windows does not expose that information reliably for every audio path. The Diagnostics tab focuses on practical suspects:
+Mic Volume Lock cannot always identify the exact process that changed the microphone level because Windows does not expose that information reliably for every audio path. The Exclusions tab focuses on practical suspects and offers a temporary exception: restore can be paused while the selected process is running.
 
 - **Discord**: Voice & Video -> Automatic Gain Control.
 - **Zoom**: Audio -> Automatically adjust microphone volume.
@@ -91,7 +91,7 @@ Mic Volume Lock does **not** record microphone audio.
 
 It does not store, analyze, upload, or transmit your voice. The app only reads and writes the Windows endpoint volume for the selected capture device.
 
-Some vendor drivers, APOs, hardware AGC implementations, and exclusive audio paths can still affect real microphone gain outside the normal Windows endpoint volume slider. Mic Volume Lock handles the endpoint volume layer and provides diagnostics for the rest.
+Some vendor drivers, APOs, hardware AGC implementations, and exclusive audio paths can still affect real microphone gain outside the normal Windows endpoint volume slider. Mic Volume Lock handles the endpoint volume layer and provides exclusions/troubleshooting hints for the rest.
 
 ## Build from source
 

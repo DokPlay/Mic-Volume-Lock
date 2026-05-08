@@ -22,6 +22,7 @@ public sealed class MicrophoneLockService : IDisposable
     private string _lastHardwareSupportText = "not initialized";
     private bool _disposed;
     private readonly Dictionary<string, int> _lastObservedVolume = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _agcCheckedEndpoints = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<LogEntry> Log { get; } = new();
 
@@ -31,6 +32,17 @@ public sealed class MicrophoneLockService : IDisposable
     public event Action<string, int>? TargetVolumeAdopted;
     public event Action<string, int, int>? VolumeRestored;
     public event Action<string, int, int>? VolumeChangedObserved;
+
+    public string AgcStatus
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _agcStatus;
+            }
+        }
+    }
 
     public MicrophoneLockService(AppConfig config)
     {
@@ -68,7 +80,17 @@ public sealed class MicrophoneLockService : IDisposable
     {
         lock (_sync)
         {
+            var wasAgcEnabled = _config.TryDisableHardwareAgc;
             _config = config ?? new AppConfig();
+            if (!_config.TryDisableHardwareAgc)
+            {
+                _agcCheckedEndpoints.Clear();
+                _agcStatus = "Not checked";
+            }
+            else if (!wasAgcEnabled)
+            {
+                _agcCheckedEndpoints.Clear();
+            }
         }
     }
 
@@ -108,10 +130,20 @@ public sealed class MicrophoneLockService : IDisposable
 
     public Task<bool> TryDisableHardwareAgcAsync(string endpointId)
     {
+        lock (_sync)
+        {
+            _agcCheckedEndpoints.Add(endpointId);
+            _agcStatus = "Checking hardware AGC...";
+        }
+
         return Task.Run(() =>
         {
             var success = TryDisableHardwareAgc(endpointId, out var status);
-            _agcStatus = status;
+            lock (_sync)
+            {
+                _agcStatus = status;
+            }
+
             return success;
         });
     }
@@ -342,16 +374,31 @@ public sealed class MicrophoneLockService : IDisposable
         }
 
         var profile = snapshot.GetProfile(endpointId);
+        QueueHardwareAgcCheckIfNeeded(snapshot, endpointId);
         if (!snapshot.IsPaused && profile.IsLockEnabled)
         {
             _ = ApplyTargetAsync(endpointId, force: false);
-            if (!isPaused)
-            {
-                _agcStatus = string.IsNullOrWhiteSpace(_agcStatus) ? "Not checked" : _agcStatus;
-            }
         }
 
         UpdateCurrentStatus(endpointId, profile, snapshot.IsPaused);
+    }
+
+    private void QueueHardwareAgcCheckIfNeeded(AppConfig snapshot, string endpointId)
+    {
+        if (!snapshot.TryDisableHardwareAgc)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (_agcCheckedEndpoints.Contains(endpointId))
+            {
+                return;
+            }
+        }
+
+        _ = TryDisableHardwareAgcAsync(endpointId);
     }
 
     private bool TryGetDefaultCommunicationEndpointIdSafe(out string? endpointId, out string? error)
@@ -467,6 +514,8 @@ public sealed class MicrophoneLockService : IDisposable
             {
                 profile.TargetVolumePercent = currentPercent;
                 snapshot.Profiles[endpointId] = profile;
+                snapshot.DefaultTargetVolumePercent = currentPercent;
+                snapshot.DefaultLockEnabled = profile.IsLockEnabled;
                 ConfigService.Save(snapshot);
                 TargetVolumeAdopted?.Invoke(endpointId, currentPercent);
 
@@ -492,11 +541,11 @@ public sealed class MicrophoneLockService : IDisposable
                 {
                     await AddLog(new LogEntry
                     {
-                        Source = "Diagnostics",
+                        Source = "Exclusion",
                         EndpointId = endpointId,
                         PreviousPercent = currentPercent,
                         NewPercent = target,
-                        Message = $"Restore ignored while {ignoredProcess} is running"
+                        Message = $"Restore skipped while process is running: {ignoredProcess}"
                     });
                     return;
                 }
@@ -552,7 +601,7 @@ public sealed class MicrophoneLockService : IDisposable
             }
             catch
             {
-                // Diagnostics must never break microphone protection.
+                // Process exclusions must never break microphone protection.
             }
         }
 
@@ -623,7 +672,7 @@ public sealed class MicrophoneLockService : IDisposable
             CurrentPercent = current,
             TargetPercent = profile.TargetVolumePercent,
             HardwareSupportText = _lastHardwareSupportText,
-            AgcStatus = _agcStatus,
+            AgcStatus = AgcStatus,
             Message = profile.IsLockEnabled
                 ? "Protection enabled"
                 : "Protection disabled"

@@ -125,6 +125,12 @@ public static class LocalizationService
         }
 
         return text
+            .Replace("Checking hardware AGC...", T("AgcChecking"), StringComparison.OrdinalIgnoreCase)
+            .Replace("No hardware AGC control exposed by this device.", T("AgcNotExposed"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Hardware AGC disabled.", T("AgcDisabled"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Hardware AGC was already disabled.", T("AgcAlreadyDisabled"), StringComparison.OrdinalIgnoreCase)
+            .Replace("AGC query failed", T("AgcQueryFailed"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Device unavailable", T("StatusNoDevice"), StringComparison.OrdinalIgnoreCase)
             .Replace("Not checked", T("NotChecked"), StringComparison.OrdinalIgnoreCase)
             .Replace("not initialized", T("Unknown"), StringComparison.OrdinalIgnoreCase)
             .Replace("unable to determine", T("Unknown"), StringComparison.OrdinalIgnoreCase);
@@ -146,6 +152,8 @@ public static class LocalizationService
             .Replace("User action", T("LogUserAction"), StringComparison.OrdinalIgnoreCase)
             .Replace("COM error", T("LogComError"), StringComparison.OrdinalIgnoreCase)
             .Replace("Rebind", T("LogRebind"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Exclusion", T("TabDiagnostics"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Restore skipped while process is running:", T("LogRestoreSkippedWhile"), StringComparison.OrdinalIgnoreCase)
             .Replace("Forced", T("LogForced"), StringComparison.OrdinalIgnoreCase)
             .Replace("Apply", T("LogApply"), StringComparison.OrdinalIgnoreCase)
             .Replace("Error", T("LogError"), StringComparison.OrdinalIgnoreCase);
@@ -225,6 +233,33 @@ public static class LocalizationService
         Set("ar-SA", "NotificationVolumeChanged", "غيّر النظام مستوى صوت الميكروفون: {0}% -> {1}%. فعّل قفل الصوت في Mic Volume Lock للحفاظ على المستوى ثابتاً.");
         Set("hi-IN", "NotificationVolumeChanged", "सिस्टम ने माइक्रोफोन वॉल्यूम बदला: {0}% -> {1}%. स्तर स्थिर रखने के लिए Mic Volume Lock में वॉल्यूम लॉक चालू करें.");
         Set("ro-RO", "NotificationVolumeChanged", "Sistemul a schimbat volumul microfonului: {0}% -> {1}%. Activează blocarea volumului în Mic Volume Lock pentru a menține nivelul stabil.");
+
+        Set("en-US", "TabDiagnostics", "Exclusions");
+        Set("ru-RU", "TabDiagnostics", "Исключения");
+        Set("en-US", "DiagnosticsTitle", "Process exclusions");
+        Set("ru-RU", "DiagnosticsTitle", "Исключения процессов");
+        Set("en-US", "DiagnosticsHint", "Windows does not expose the exact app that changed microphone level. An exclusion temporarily pauses restore while the selected process is running. Use it for testing Discord, Zoom, games, or driver utilities, then clear it.");
+        Set("ru-RU", "DiagnosticsHint", "Windows не сообщает точное приложение, которое изменило уровень микрофона. Исключение временно отключает восстановление, пока выбранный процесс запущен. Используйте это для проверки Discord, Zoom, игр или драйверных утилит, затем уберите исключение.");
+        Set("en-US", "IgnoreProcess", "Add selected process to exclusions");
+        Set("ru-RU", "IgnoreProcess", "Добавить процесс в исключения");
+        Set("en-US", "StopIgnoringProcess", "Clear exclusion");
+        Set("ru-RU", "StopIgnoringProcess", "Убрать исключение");
+        Set("en-US", "SuspectsTitle", "Where to turn off auto changes");
+        Set("ru-RU", "SuspectsTitle", "Где отключить автоизменение");
+        Set("en-US", "DiagnosticsIgnoredActive", "Exclusion active: restore is paused while {0} is running.");
+        Set("ru-RU", "DiagnosticsIgnoredActive", "Исключение активно: восстановление отключено, пока запущен {0}.");
+        Set("en-US", "AgcChecking", "checking hardware AGC...");
+        Set("ru-RU", "AgcChecking", "проверка аппаратного AGC...");
+        Set("en-US", "AgcNotExposed", "hardware AGC control is not exposed by this device");
+        Set("ru-RU", "AgcNotExposed", "устройство не открыло управление аппаратным AGC");
+        Set("en-US", "AgcDisabled", "hardware AGC disabled");
+        Set("ru-RU", "AgcDisabled", "аппаратный AGC отключён");
+        Set("en-US", "AgcAlreadyDisabled", "hardware AGC was already disabled");
+        Set("ru-RU", "AgcAlreadyDisabled", "аппаратный AGC уже был отключён");
+        Set("en-US", "AgcQueryFailed", "AGC check failed");
+        Set("ru-RU", "AgcQueryFailed", "проверка AGC не удалась");
+        Set("en-US", "LogRestoreSkippedWhile", "Restore skipped while process is running:");
+        Set("ru-RU", "LogRestoreSkippedWhile", "Восстановление пропущено, пока процесс запущен:");
 
         Set("en-US", "TabTheme", "Theme");
         Set("ru-RU", "TabTheme", "Тема");
