@@ -308,7 +308,7 @@ public partial class MainWindow : Window
         WindowsExclusiveHintText.Text = LocalizationService.T("WindowsExclusiveHint");
         NvidiaHintText.Text = LocalizationService.T("NvidiaHint");
         AmdHintText.Text = LocalizationService.T("AmdHint");
-        DiagnosticsLastEventText.Text = _lastDiagnosticsText;
+        RenderProcessExceptionStatus();
         HelpSectionTitle.Text = LocalizationService.T("HelpTitle");
         CopyLogButton.Content = LocalizationService.T("CopyLog");
         OpenLogsFolderButton.Content = LocalizationService.T("OpenLogsFolder");
@@ -359,7 +359,13 @@ public partial class MainWindow : Window
         }
         else if (_config.FollowDefaultCommunicationsDevice)
         {
-            DeviceCombo.SelectedItem = devices.FirstOrDefault(d => d.IsDefaultCommunicationDevice);
+            var defaultDevice = devices.FirstOrDefault(d => d.IsDefaultCommunicationDevice);
+            DeviceCombo.SelectedItem = defaultDevice;
+            if (defaultDevice is not null)
+            {
+                LoadEndpointProfileIntoUi(defaultDevice.Id);
+            }
+
             SetNoExplicitDevice();
             FollowDefaultCheck.IsChecked = true;
         }
@@ -380,17 +386,24 @@ public partial class MainWindow : Window
 
     private void OnDeviceSelected(MicDeviceInfo device)
     {
+        var wasSuspended = _suspendUi;
         _suspendUi = true;
         _config.SelectedEndpointId = device.Id;
-        var profile = _config.GetProfile(device.Id);
-        VolumeSlider.Value = Math.Clamp(profile.TargetVolumePercent, 0, 100);
-        VolumeText.Text = profile.TargetVolumePercent.ToString(CultureInfo.InvariantCulture);
-        LockCheck.IsChecked = profile.IsLockEnabled;
-        _suspendUi = false;
+        LoadEndpointProfileIntoUi(device.Id);
+        _suspendUi = wasSuspended;
 
         EndpointIdText.Text = $"{LocalizationService.T("EndpointLabel")}: {device.Id}";
         UpdateDbHint();
         _service.UpdateConfig(_config);
+    }
+
+    private void LoadEndpointProfileIntoUi(string endpointId)
+    {
+        var profile = _config.GetProfile(endpointId);
+        VolumeSlider.Value = Math.Clamp(profile.TargetVolumePercent, 0, 100);
+        VolumeText.Text = profile.TargetVolumePercent.ToString(CultureInfo.InvariantCulture);
+        LockCheck.IsChecked = profile.IsLockEnabled;
+        UpdateDbHint();
     }
 
     private void SetNoExplicitDevice()
@@ -494,6 +507,8 @@ public partial class MainWindow : Window
         var profile = _config.GetProfile(endpointId);
         profile.IsLockEnabled = LockCheck.IsChecked == true;
         _config.Profiles[endpointId] = profile;
+        _config.DefaultTargetVolumePercent = profile.TargetVolumePercent;
+        _config.DefaultLockEnabled = profile.IsLockEnabled;
         SaveConfig();
         _service.UpdateConfig(_config);
         if (profile.IsLockEnabled)
@@ -546,15 +561,22 @@ public partial class MainWindow : Window
 
         if (_config.FollowDefaultCommunicationsDevice)
         {
-            SetNoExplicitDevice();
-            if (ResolveSelectedEndpoint(out var defaultEndpointId))
+            var defaultDevice = _service.GetCaptureDevices().FirstOrDefault(d => d.IsDefaultCommunicationDevice);
+            if (defaultDevice is not null)
             {
-                var profile = _config.GetProfile(defaultEndpointId);
-                profile.TargetVolumePercent = (int)Math.Round(Math.Clamp(VolumeSlider.Value, 0, 100));
-                profile.IsLockEnabled = LockCheck.IsChecked == true;
-                _config.Profiles[defaultEndpointId] = profile;
-                _service.ApplyNow(defaultEndpointId);
+                var wasSuspended = _suspendUi;
+                _suspendUi = true;
+                DeviceCombo.SelectedItem = defaultDevice;
+                LoadEndpointProfileIntoUi(defaultDevice.Id);
+                _suspendUi = wasSuspended;
+
+                if (_config.GetProfile(defaultDevice.Id).IsLockEnabled)
+                {
+                    _service.ApplyNow(defaultDevice.Id);
+                }
             }
+
+            SetNoExplicitDevice();
         }
         else if (DeviceCombo.SelectedItem is MicDeviceInfo selected)
         {
@@ -578,12 +600,17 @@ public partial class MainWindow : Window
         SaveConfig();
         _service.UpdateConfig(_config);
 
+        if (!_config.TryDisableHardwareAgc)
+        {
+            RenderStatus();
+            return;
+        }
+
         if (ResolveSelectedEndpoint(out var endpointId))
         {
-            var success = await _service.TryDisableHardwareAgcAsync(endpointId);
-            AgcText.Text = success
-                ? $"{LocalizationService.T("Agc")}: OK"
-                : LocalizationService.T("AgcUnsupported");
+            AgcText.Text = $"{LocalizationService.T("Agc")}: {LocalizationService.T("AgcChecking")}";
+            await _service.TryDisableHardwareAgcAsync(endpointId);
+            AgcText.Text = $"{LocalizationService.T("Agc")}: {LocalizationService.LocalizeTechnicalText(_service.AgcStatus)}";
         }
         else
         {
@@ -918,19 +945,37 @@ public partial class MainWindow : Window
     {
         try
         {
-            var processes = Process.GetProcesses()
-                .Where(p => !string.IsNullOrWhiteSpace(p.ProcessName))
-                .GroupBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First())
-                .OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase)
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var process in Process.GetProcesses())
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(process.ProcessName))
+                    {
+                        names.Add(NormalizeProcessName(process.ProcessName));
+                    }
+                }
+                catch
+                {
+                    // A process can exit while the list is being built.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+
+            var processes = names
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             ProcessCombo.ItemsSource = processes;
-            var selectedName = _config.DiagnosticSelectedProcessName;
-            ProcessCombo.SelectedItem = processes.FirstOrDefault(p => string.Equals(p.ProcessName, selectedName, StringComparison.OrdinalIgnoreCase));
+            var selectedName = NormalizeProcessName(_config.DiagnosticSelectedProcessName ?? _config.DiagnosticIgnoredProcesses.FirstOrDefault());
+            ProcessCombo.SelectedItem = processes.FirstOrDefault(p => string.Equals(p, selectedName, StringComparison.OrdinalIgnoreCase));
+            RenderProcessExceptionStatus();
         }
         catch
         {
-            ProcessCombo.ItemsSource = Array.Empty<Process>();
+            ProcessCombo.ItemsSource = Array.Empty<string>();
         }
     }
 
@@ -941,25 +986,49 @@ public partial class MainWindow : Window
 
     private void IgnoreProcessButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (ProcessCombo.SelectedItem is not Process process)
+        var processName = NormalizeProcessName(ProcessCombo.SelectedItem as string);
+        if (string.IsNullOrWhiteSpace(processName))
         {
             return;
         }
 
-        _config.DiagnosticSelectedProcessName = process.ProcessName;
+        _config.DiagnosticSelectedProcessName = processName;
         _config.DiagnosticIgnoredProcesses.Clear();
-        _config.DiagnosticIgnoredProcesses.Add(process.ProcessName);
+        _config.DiagnosticIgnoredProcesses.Add(processName);
         SaveConfig();
         _service.UpdateConfig(_config);
-        DiagnosticsLastEventText.Text = LocalizationService.Format("DiagnosticsIgnoredActive", process.ProcessName);
+        RenderProcessExceptionStatus();
     }
 
     private void StopIgnoringProcessButton_OnClick(object sender, RoutedEventArgs e)
     {
         _config.DiagnosticIgnoredProcesses.Clear();
+        _config.DiagnosticSelectedProcessName = null;
         SaveConfig();
         _service.UpdateConfig(_config);
+        ProcessCombo.SelectedItem = null;
+        _lastDiagnosticsText = string.Empty;
         DiagnosticsLastEventText.Text = string.Empty;
+    }
+
+    private void RenderProcessExceptionStatus()
+    {
+        var processName = NormalizeProcessName(_config.DiagnosticIgnoredProcesses.FirstOrDefault());
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            DiagnosticsLastEventText.Text = _lastDiagnosticsText;
+            return;
+        }
+
+        _lastDiagnosticsText = LocalizationService.Format("DiagnosticsIgnoredActive", processName);
+        DiagnosticsLastEventText.Text = _lastDiagnosticsText;
+    }
+
+    private static string NormalizeProcessName(string? processName)
+    {
+        return string.IsNullOrWhiteSpace(processName)
+            ? string.Empty
+            : Path.GetFileNameWithoutExtension(processName.Trim());
     }
 
     private void CopyLogButton_OnClick(object sender, RoutedEventArgs e)
@@ -1043,8 +1112,11 @@ public partial class MainWindow : Window
         }
 
         var profile = _config.GetProfile(endpointId);
-        profile.TargetVolumePercent = (int)Math.Round(Math.Clamp(VolumeSlider.Value, 0, 100));
+        var target = (int)Math.Round(Math.Clamp(VolumeSlider.Value, 0, 100));
+        profile.TargetVolumePercent = target;
         _config.Profiles[endpointId] = profile;
+        _config.DefaultTargetVolumePercent = target;
+        _config.DefaultLockEnabled = LockCheck.IsChecked == true;
         SaveConfig();
         _service.UpdateConfig(_config);
     }
