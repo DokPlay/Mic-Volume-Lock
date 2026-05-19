@@ -323,7 +323,7 @@ public partial class MainWindow : Window
         LanguageSectionTitle.Text = LocalizationService.T("LanguageTitle");
         LanguageHintText.Text = LocalizationService.T("LanguageHint");
         AboutTitleText.Text = LocalizationService.T("AboutTitle");
-        AboutTextBlock.Text = $"{LocalizationService.T("Version")}: 1.0.2{Environment.NewLine}{Environment.NewLine}{LocalizationService.T("AboutText")}";
+        AboutTextBlock.Text = $"{LocalizationService.T("Version")}: 1.0.3{Environment.NewLine}{Environment.NewLine}{LocalizationService.T("AboutText")}";
 
         RenderStatus();
         UpdateEndpointHint();

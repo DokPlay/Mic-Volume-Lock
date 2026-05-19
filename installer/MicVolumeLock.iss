@@ -1,5 +1,5 @@
 #define AppName "Mic Volume Lock"
-#define AppVersion "1.0.2"
+#define AppVersion "1.0.3"
 #define AppPublisher "Mic Volume Lock"
 #define AppExeName "MicVolumeLock.exe"
 
@@ -239,6 +239,19 @@ begin
     UninstallString);
 end;
 
+procedure StopRunningApp();
+var
+  ResultCode: Integer;
+begin
+  Exec(
+    ExpandConstant('{cmd}'),
+    '/C taskkill /IM {#AppExeName} /F /T >nul 2>nul & exit /B 0',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode);
+end;
+
 function ShowExistingInstallDialog(): Integer;
 var
   Form: TSetupForm;
@@ -346,6 +359,14 @@ begin
   else if ActiveLanguage = 'hindi' then Result := 'hi-IN'
   else if ActiveLanguage = 'romanian' then Result := 'ro-RO'
   else Result := 'en-US';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    StopRunningApp();
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

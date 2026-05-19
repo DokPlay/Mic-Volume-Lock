@@ -8,9 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MicVolumeLock</RootNamespace>
     <AssemblyName>MicVolumeLock</AssemblyName>
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
+    <Version>1.0.3</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
+    <InformationalVersion>1.0.3</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationIcon>Assets\MicVolumeLock.ico</ApplicationIcon>
     <EnableNETAnalyzers>false</EnableNETAnalyzers>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
