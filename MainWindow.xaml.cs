@@ -952,7 +952,11 @@ public partial class MainWindow : Window
                 {
                     if (!string.IsNullOrWhiteSpace(process.ProcessName))
                     {
-                        names.Add(NormalizeProcessName(process.ProcessName));
+                        var normalized = ProcessExclusionService.Normalize(process.ProcessName);
+                        if (ProcessExclusionService.CanExclude(normalized))
+                        {
+                            names.Add(normalized);
+                        }
                     }
                 }
                 catch
@@ -969,7 +973,8 @@ public partial class MainWindow : Window
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             ProcessCombo.ItemsSource = processes;
-            var selectedName = NormalizeProcessName(_config.DiagnosticSelectedProcessName ?? _config.DiagnosticIgnoredProcesses.FirstOrDefault());
+            ProcessExclusionService.Clean(_config);
+            var selectedName = ProcessExclusionService.Normalize(_config.DiagnosticSelectedProcessName ?? _config.DiagnosticIgnoredProcesses.FirstOrDefault());
             ProcessCombo.SelectedItem = processes.FirstOrDefault(p => string.Equals(p, selectedName, StringComparison.OrdinalIgnoreCase));
             RenderProcessExceptionStatus();
         }
@@ -986,8 +991,8 @@ public partial class MainWindow : Window
 
     private void IgnoreProcessButton_OnClick(object sender, RoutedEventArgs e)
     {
-        var processName = NormalizeProcessName(ProcessCombo.SelectedItem as string);
-        if (string.IsNullOrWhiteSpace(processName))
+        var processName = ProcessExclusionService.Normalize(ProcessCombo.SelectedItem as string);
+        if (!ProcessExclusionService.CanExclude(processName))
         {
             return;
         }
@@ -1013,7 +1018,8 @@ public partial class MainWindow : Window
 
     private void RenderProcessExceptionStatus()
     {
-        var processName = NormalizeProcessName(_config.DiagnosticIgnoredProcesses.FirstOrDefault());
+        ProcessExclusionService.Clean(_config);
+        var processName = ProcessExclusionService.Normalize(_config.DiagnosticIgnoredProcesses.FirstOrDefault());
         if (string.IsNullOrWhiteSpace(processName))
         {
             DiagnosticsLastEventText.Text = _lastDiagnosticsText;
@@ -1022,13 +1028,6 @@ public partial class MainWindow : Window
 
         _lastDiagnosticsText = LocalizationService.Format("DiagnosticsIgnoredActive", processName);
         DiagnosticsLastEventText.Text = _lastDiagnosticsText;
-    }
-
-    private static string NormalizeProcessName(string? processName)
-    {
-        return string.IsNullOrWhiteSpace(processName)
-            ? string.Empty
-            : Path.GetFileNameWithoutExtension(processName.Trim());
     }
 
     private void CopyLogButton_OnClick(object sender, RoutedEventArgs e)

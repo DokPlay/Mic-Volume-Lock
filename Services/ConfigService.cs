@@ -44,6 +44,7 @@ public static class ConfigService
                 cfg.AppLanguage = LocalizationService.NormalizeLanguage(cfg.AppLanguage) ?? LocalizationService.DefaultLanguage;
             }
 
+            Save(cfg);
             return cfg;
         }
         catch
@@ -76,6 +77,7 @@ public static class ConfigService
         config.Profiles ??= new Dictionary<string, DeviceProfile>();
         config.VolumeProfiles ??= new List<VolumeProfile>();
         config.DiagnosticIgnoredProcesses ??= new List<string>();
+        ProcessExclusionService.Clean(config);
 
         if (config.VolumeProfiles.Count == 0)
         {
