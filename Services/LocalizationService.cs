@@ -154,6 +154,8 @@ public static class LocalizationService
             .Replace("Rebind", T("LogRebind"), StringComparison.OrdinalIgnoreCase)
             .Replace("Exclusion", T("TabDiagnostics"), StringComparison.OrdinalIgnoreCase)
             .Replace("Restore skipped while process is running:", T("LogRestoreSkippedWhile"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Startup apply", T("LogStartupApply"), StringComparison.OrdinalIgnoreCase)
+            .Replace("Saved target applied", T("LogSavedTargetApplied"), StringComparison.OrdinalIgnoreCase)
             .Replace("Forced", T("LogForced"), StringComparison.OrdinalIgnoreCase)
             .Replace("Apply", T("LogApply"), StringComparison.OrdinalIgnoreCase)
             .Replace("Error", T("LogError"), StringComparison.OrdinalIgnoreCase);
@@ -260,6 +262,10 @@ public static class LocalizationService
         Set("ru-RU", "AgcQueryFailed", "проверка AGC не удалась");
         Set("en-US", "LogRestoreSkippedWhile", "Restore skipped while process is running:");
         Set("ru-RU", "LogRestoreSkippedWhile", "Восстановление пропущено, пока процесс запущен:");
+        Set("en-US", "LogStartupApply", "Startup apply");
+        Set("ru-RU", "LogStartupApply", "Применение при запуске");
+        Set("en-US", "LogSavedTargetApplied", "Saved target applied");
+        Set("ru-RU", "LogSavedTargetApplied", "Сохранённая цель применена");
 
         Set("en-US", "TabTheme", "Theme");
         Set("ru-RU", "TabTheme", "Тема");

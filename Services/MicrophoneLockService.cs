@@ -23,6 +23,7 @@ public sealed class MicrophoneLockService : IDisposable
     private bool _disposed;
     private readonly Dictionary<string, int> _lastObservedVolume = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _agcCheckedEndpoints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _startupAppliedEndpoints = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<LogEntry> Log { get; } = new();
 
@@ -361,7 +362,8 @@ public sealed class MicrophoneLockService : IDisposable
             return;
         }
 
-        if (!string.Equals(_activeEndpointId, endpointId, StringComparison.OrdinalIgnoreCase))
+        var endpointChanged = !string.Equals(_activeEndpointId, endpointId, StringComparison.OrdinalIgnoreCase);
+        if (endpointChanged)
         {
             _activeEndpointId = endpointId;
             _ = AddLog(new LogEntry
@@ -377,7 +379,8 @@ public sealed class MicrophoneLockService : IDisposable
         QueueHardwareAgcCheckIfNeeded(snapshot, endpointId);
         if (!snapshot.IsPaused && profile.IsLockEnabled)
         {
-            _ = ApplyTargetAsync(endpointId, force: false);
+            var forceInitialApply = endpointChanged || !_startupAppliedEndpoints.Contains(endpointId);
+            _ = ApplyTargetAsync(endpointId, force: forceInitialApply, markStartupApplied: forceInitialApply);
         }
 
         UpdateCurrentStatus(endpointId, profile, snapshot.IsPaused);
@@ -467,7 +470,7 @@ public sealed class MicrophoneLockService : IDisposable
         });
     }
 
-    private async Task ApplyTargetAsync(string endpointId, bool force)
+    private async Task ApplyTargetAsync(string endpointId, bool force, bool markStartupApplied = false)
     {
         if (string.IsNullOrWhiteSpace(endpointId))
         {
@@ -496,6 +499,11 @@ public sealed class MicrophoneLockService : IDisposable
             var device = _enumerator.GetDevice(endpointId);
             if (device == null || device.State != DeviceState.Active)
             {
+                if (markStartupApplied)
+                {
+                    _startupAppliedEndpoints.Remove(endpointId);
+                }
+
                 _ = AddLog(new LogEntry
                 {
                     Source = "Restore",
@@ -509,6 +517,16 @@ public sealed class MicrophoneLockService : IDisposable
             var currentPercent = (int)Math.Round(endpointVolume.MasterVolumeLevelScalar * 100);
             var target = Math.Clamp(profile.TargetVolumePercent, 0, 100);
             var delta = Math.Abs(currentPercent - target);
+
+            if (delta <= 1)
+            {
+                if (markStartupApplied)
+                {
+                    _startupAppliedEndpoints.Add(endpointId);
+                }
+
+                return;
+            }
 
             if (!force && snapshot.AdoptHigherExternalVolume && currentPercent > target + 1)
             {
@@ -530,42 +548,49 @@ public sealed class MicrophoneLockService : IDisposable
                 return;
             }
 
-            if (delta > 1)
+            if (!force && DateTime.UtcNow - _lastApplyUtc < TimeSpan.FromMilliseconds(750))
             {
-                if (!force && DateTime.UtcNow - _lastApplyUtc < TimeSpan.FromMilliseconds(750))
-                {
-                    return;
-                }
+                return;
+            }
 
-                if (!force && HasIgnoredDiagnosticProcess(snapshot, out var ignoredProcess))
-                {
-                    await AddLog(new LogEntry
-                    {
-                        Source = "Exclusion",
-                        EndpointId = endpointId,
-                        PreviousPercent = currentPercent,
-                        NewPercent = target,
-                        Message = $"Restore skipped while process is running: {ignoredProcess}"
-                    });
-                    return;
-                }
-
-                endpointVolume.MasterVolumeLevelScalar = target / 100f;
-                _lastApplyUtc = DateTime.UtcNow;
-                VolumeRestored?.Invoke(endpointId, currentPercent, target);
-
+            if (!force && HasIgnoredDiagnosticProcess(snapshot, out var ignoredProcess))
+            {
                 await AddLog(new LogEntry
                 {
-                    Source = "Forced",
+                    Source = "Exclusion",
                     EndpointId = endpointId,
                     PreviousPercent = currentPercent,
                     NewPercent = target,
-                    Message = "Level restored to target"
+                    Message = $"Restore skipped while process is running: {ignoredProcess}"
                 });
+                return;
             }
+
+            endpointVolume.MasterVolumeLevelScalar = target / 100f;
+            _lastApplyUtc = DateTime.UtcNow;
+            if (markStartupApplied)
+            {
+                _startupAppliedEndpoints.Add(endpointId);
+            }
+
+            VolumeRestored?.Invoke(endpointId, currentPercent, target);
+
+            await AddLog(new LogEntry
+            {
+                Source = markStartupApplied ? "Startup apply" : "Forced",
+                EndpointId = endpointId,
+                PreviousPercent = currentPercent,
+                NewPercent = target,
+                Message = markStartupApplied ? "Saved target applied" : "Level restored to target"
+            });
         }
         catch (COMException ex)
         {
+            if (markStartupApplied)
+            {
+                _startupAppliedEndpoints.Remove(endpointId);
+            }
+
             _ = AddLog(new LogEntry
             {
                 Source = "Forced",
@@ -575,6 +600,11 @@ public sealed class MicrophoneLockService : IDisposable
         }
         catch (Exception ex)
         {
+            if (markStartupApplied)
+            {
+                _startupAppliedEndpoints.Remove(endpointId);
+            }
+
             _ = AddLog(new LogEntry
             {
                 Source = "Forced",
@@ -592,7 +622,12 @@ public sealed class MicrophoneLockService : IDisposable
         {
             try
             {
-                var normalized = Path.GetFileNameWithoutExtension(name.Trim());
+                var normalized = ProcessExclusionService.Normalize(name);
+                if (!ProcessExclusionService.CanExclude(normalized))
+                {
+                    continue;
+                }
+
                 if (Process.GetProcessesByName(normalized).Length > 0)
                 {
                     processName = normalized;
