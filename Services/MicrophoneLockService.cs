@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using MicVolumeLock.Models;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
@@ -11,16 +12,26 @@ namespace MicVolumeLock.Services;
 
 public sealed class MicrophoneLockService : IDisposable
 {
+    private const double WatchdogIntervalMilliseconds = 10_000;
+
     private readonly MMDeviceEnumerator _enumerator = new();
-    private readonly System.Timers.Timer _pollTimer;
+    private readonly System.Timers.Timer _watchdogTimer;
+    private readonly EndpointNotificationClient _endpointNotifications;
+    private readonly Guid _volumeEventContext = Guid.NewGuid();
     private readonly object _sync = new();
 
     private AppConfig _config;
     private string? _activeEndpointId;
+    private string? _subscribedEndpointId;
+    private MMDevice? _subscribedDevice;
+    private AudioEndpointVolume? _subscribedEndpointVolume;
+    private ServiceStatus? _lastRaisedStatus;
     private DateTime _lastApplyUtc = DateTime.MinValue;
     private string _agcStatus = "Not checked";
     private string _lastHardwareSupportText = "not initialized";
+    private bool _endpointNotificationsRegistered;
     private bool _disposed;
+    private int _pollInProgress;
     private readonly Dictionary<string, int> _lastObservedVolume = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _agcCheckedEndpoints = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _startupAppliedEndpoints = new(StringComparer.OrdinalIgnoreCase);
@@ -48,8 +59,12 @@ public sealed class MicrophoneLockService : IDisposable
     public MicrophoneLockService(AppConfig config)
     {
         _config = config ?? new AppConfig();
-        _pollTimer = new System.Timers.Timer(1000);
-        _pollTimer.Elapsed += (_, _) => PollOnce();
+        _endpointNotifications = new EndpointNotificationClient(this);
+        _watchdogTimer = new System.Timers.Timer(WatchdogIntervalMilliseconds)
+        {
+            AutoReset = true
+        };
+        _watchdogTimer.Elapsed += (_, _) => PollOnce();
     }
 
     public IReadOnlyList<MicDeviceInfo> GetCaptureDevices()
@@ -93,6 +108,8 @@ public sealed class MicrophoneLockService : IDisposable
                 _agcCheckedEndpoints.Clear();
             }
         }
+
+        RequestPoll();
     }
 
     public void Start()
@@ -102,13 +119,16 @@ public sealed class MicrophoneLockService : IDisposable
             return;
         }
 
-        _pollTimer.Start();
+        RegisterEndpointNotifications();
+        _watchdogTimer.Start();
         PollOnce();
     }
 
     public void Stop()
     {
-        _pollTimer.Stop();
+        _watchdogTimer.Stop();
+        UnregisterEndpointNotifications();
+        ClearVolumeSubscription();
     }
 
     public void Dispose()
@@ -118,15 +138,218 @@ public sealed class MicrophoneLockService : IDisposable
             return;
         }
 
-        _pollTimer.Stop();
-        _pollTimer.Dispose();
-        _enumerator.Dispose();
         _disposed = true;
+        _watchdogTimer.Stop();
+        _watchdogTimer.Dispose();
+        UnregisterEndpointNotifications();
+        ClearVolumeSubscription();
+        _enumerator.Dispose();
     }
 
     public void ApplyNow(string endpointId)
     {
         _ = ApplyTargetAsync(endpointId, force: true);
+    }
+
+    private void RegisterEndpointNotifications()
+    {
+        lock (_sync)
+        {
+            if (_endpointNotificationsRegistered || _disposed)
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            _enumerator.RegisterEndpointNotificationCallback(_endpointNotifications);
+            lock (_sync)
+            {
+                _endpointNotificationsRegistered = true;
+            }
+        }
+        catch
+        {
+            // Device notifications are an optimization. The watchdog still keeps protection alive.
+        }
+    }
+
+    private void UnregisterEndpointNotifications()
+    {
+        lock (_sync)
+        {
+            if (!_endpointNotificationsRegistered)
+            {
+                return;
+            }
+
+            _endpointNotificationsRegistered = false;
+        }
+
+        try
+        {
+            _enumerator.UnregisterEndpointNotificationCallback(_endpointNotifications);
+        }
+        catch
+        {
+            // Best-effort cleanup; the process is shutting down or the enumerator is already unavailable.
+        }
+    }
+
+    private void RequestPoll()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _ = Task.Run(PollOnce);
+    }
+
+    private void EnsureVolumeSubscription(string endpointId)
+    {
+        if (string.IsNullOrWhiteSpace(endpointId))
+        {
+            ClearVolumeSubscription();
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (string.Equals(_subscribedEndpointId, endpointId, StringComparison.OrdinalIgnoreCase) &&
+                _subscribedEndpointVolume is not null)
+            {
+                return;
+            }
+        }
+
+        ClearVolumeSubscription();
+
+        MMDevice? device = null;
+        AudioEndpointVolume? endpointVolume = null;
+        try
+        {
+            device = _enumerator.GetDevice(endpointId);
+            if (device is null || device.State != DeviceState.Active)
+            {
+                device?.Dispose();
+                return;
+            }
+
+            endpointVolume = device.AudioEndpointVolume;
+            endpointVolume.NotificationGuid = _volumeEventContext;
+            endpointVolume.OnVolumeNotification += OnVolumeNotification;
+
+            lock (_sync)
+            {
+                _subscribedEndpointId = endpointId;
+                _subscribedDevice = device;
+                _subscribedEndpointVolume = endpointVolume;
+            }
+        }
+        catch
+        {
+            try
+            {
+                if (endpointVolume is not null)
+                {
+                    endpointVolume.OnVolumeNotification -= OnVolumeNotification;
+                    endpointVolume.Dispose();
+                }
+            }
+            catch
+            {
+                // ignored
+            }
+
+            device?.Dispose();
+        }
+    }
+
+    private void ClearVolumeSubscription()
+    {
+        AudioEndpointVolume? endpointVolume;
+        MMDevice? device;
+
+        lock (_sync)
+        {
+            endpointVolume = _subscribedEndpointVolume;
+            device = _subscribedDevice;
+            _subscribedEndpointVolume = null;
+            _subscribedDevice = null;
+            _subscribedEndpointId = null;
+        }
+
+        try
+        {
+            if (endpointVolume is not null)
+            {
+                endpointVolume.OnVolumeNotification -= OnVolumeNotification;
+                endpointVolume.Dispose();
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        try
+        {
+            device?.Dispose();
+        }
+        catch
+        {
+            // ignored
+        }
+    }
+
+    private void OnVolumeNotification(AudioVolumeNotificationData notification)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        string? endpointId;
+        lock (_sync)
+        {
+            endpointId = _subscribedEndpointId;
+        }
+
+        if (string.IsNullOrWhiteSpace(endpointId))
+        {
+            return;
+        }
+
+        var currentPercent = (int)Math.Round(Math.Clamp(notification.MasterVolume, 0f, 1f) * 100);
+        _ = Task.Run(() => HandleVolumeNotification(endpointId, currentPercent));
+    }
+
+    private void HandleVolumeNotification(string endpointId, int currentPercent)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        AppConfig snapshot;
+        lock (_sync)
+        {
+            snapshot = _config;
+        }
+
+        var profile = snapshot.GetProfile(endpointId);
+        if (!snapshot.IsPaused && profile.IsLockEnabled)
+        {
+            var target = Math.Clamp(profile.TargetVolumePercent, 0, 100);
+            if (Math.Abs(currentPercent - target) > 1)
+            {
+                _ = ApplyTargetAsync(endpointId, force: false);
+            }
+        }
+
+        UpdateCurrentStatus(endpointId, profile, snapshot.IsPaused, currentPercent);
     }
 
     public Task<bool> TryDisableHardwareAgcAsync(string endpointId)
@@ -155,7 +378,7 @@ public sealed class MicrophoneLockService : IDisposable
 
         try
         {
-            var device = _enumerator.GetDevice(endpointId);
+            using var device = _enumerator.GetDevice(endpointId);
             if (device == null)
             {
                 status = "Device unavailable";
@@ -318,38 +541,49 @@ public sealed class MicrophoneLockService : IDisposable
         }
     }
 
-    private string? ResolveActiveEndpointId()
-    {
-        lock (_sync)
-        {
-            if (_config.FollowDefaultCommunicationsDevice)
-            {
-                return TryGetDefaultCommunicationEndpointId();
-            }
-
-            return _config.SelectedEndpointId;
-        }
-    }
-
     private void PollOnce()
     {
-        if (_disposed)
+        if (_disposed || Interlocked.Exchange(ref _pollInProgress, 1) == 1)
         {
             return;
         }
 
+        try
+        {
+            PollOnceCore();
+        }
+        catch
+        {
+            // The watchdog must never terminate the process or timer thread.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _pollInProgress, 0);
+        }
+    }
+
+    private void PollOnceCore()
+    {
         string? endpointId;
         AppConfig snapshot;
         bool isPaused;
+        bool followDefaultCommunicationsDevice;
+        string? selectedEndpointId;
         lock (_sync)
         {
             snapshot = _config;
             isPaused = snapshot.IsPaused;
-            endpointId = ResolveActiveEndpointId();
+            followDefaultCommunicationsDevice = snapshot.FollowDefaultCommunicationsDevice;
+            selectedEndpointId = snapshot.SelectedEndpointId;
         }
+        endpointId = followDefaultCommunicationsDevice
+            ? TryGetDefaultCommunicationEndpointId()
+            : selectedEndpointId;
 
         if (string.IsNullOrWhiteSpace(endpointId))
         {
+            _activeEndpointId = null;
+            ClearVolumeSubscription();
             RaiseStatus(new ServiceStatus
             {
                 HasActiveDevice = false,
@@ -374,6 +608,8 @@ public sealed class MicrophoneLockService : IDisposable
             });
             _ = UpdateCurrentHardwareSupport(endpointId);
         }
+
+        EnsureVolumeSubscription(endpointId);
 
         var profile = snapshot.GetProfile(endpointId);
         QueueHardwareAgcCheckIfNeeded(snapshot, endpointId);
@@ -438,13 +674,13 @@ public sealed class MicrophoneLockService : IDisposable
 
         try
         {
-            var device = _enumerator.GetDevice(endpointId);
+            using var device = _enumerator.GetDevice(endpointId);
             if (device == null)
             {
                 return;
             }
 
-            var endpointVolume = device.AudioEndpointVolume;
+            using var endpointVolume = device.AudioEndpointVolume;
             var flags = endpointVolume.HardwareSupport;
 
             var parts = new List<string>();
@@ -496,7 +732,7 @@ public sealed class MicrophoneLockService : IDisposable
 
         try
         {
-            var device = _enumerator.GetDevice(endpointId);
+            using var device = _enumerator.GetDevice(endpointId);
             if (device == null || device.State != DeviceState.Active)
             {
                 if (markStartupApplied)
@@ -513,7 +749,8 @@ public sealed class MicrophoneLockService : IDisposable
                 return;
             }
 
-            var endpointVolume = device.AudioEndpointVolume;
+            using var endpointVolume = device.AudioEndpointVolume;
+            endpointVolume.NotificationGuid = _volumeEventContext;
             var currentPercent = (int)Math.Round(endpointVolume.MasterVolumeLevelScalar * 100);
             var target = Math.Clamp(profile.TargetVolumePercent, 0, 100);
             var delta = Math.Abs(currentPercent - target);
@@ -667,29 +904,48 @@ public sealed class MicrophoneLockService : IDisposable
         LogAdded?.Invoke(entry);
     }
 
-    private void UpdateCurrentStatus(string endpointId, DeviceProfile profile, bool isPaused)
+    private void UpdateCurrentStatus(string endpointId, DeviceProfile profile, bool isPaused, int? knownCurrentPercent = null)
     {
-        int current = -1;
-        try
+        var current = knownCurrentPercent ?? -1;
+        if (!knownCurrentPercent.HasValue)
         {
-            var device = _enumerator.GetDevice(endpointId);
-            if (device != null && device.State == DeviceState.Active)
+            try
             {
-                current = (int)Math.Round(device.AudioEndpointVolume.MasterVolumeLevelScalar * 100);
+                using var device = _enumerator.GetDevice(endpointId);
+                if (device != null && device.State == DeviceState.Active)
+                {
+                    using var endpointVolume = device.AudioEndpointVolume;
+                    current = (int)Math.Round(endpointVolume.MasterVolumeLevelScalar * 100);
+                }
             }
-        }
-        catch
-        {
-            // ignored
+            catch
+            {
+                // ignored
+            }
         }
 
         var name = "Not found";
         try
         {
-            var dev = _enumerator.GetDevice(endpointId);
-            if (dev != null)
+            MMDevice? subscribedDevice;
+            lock (_sync)
             {
-                name = dev.FriendlyName ?? endpointId;
+                subscribedDevice = string.Equals(_subscribedEndpointId, endpointId, StringComparison.OrdinalIgnoreCase)
+                    ? _subscribedDevice
+                    : null;
+            }
+
+            if (subscribedDevice != null)
+            {
+                name = subscribedDevice.FriendlyName ?? endpointId;
+            }
+            else
+            {
+                using var dev = _enumerator.GetDevice(endpointId);
+                if (dev != null)
+                {
+                    name = dev.FriendlyName ?? endpointId;
+                }
             }
         }
         catch
@@ -729,10 +985,81 @@ public sealed class MicrophoneLockService : IDisposable
 
     private async void RaiseStatus(ServiceStatus status)
     {
+        if (!ShouldRaiseStatus(status))
+        {
+            return;
+        }
+
         await App.Current.Dispatcher.InvokeAsync(() =>
         {
             StatusChanged?.Invoke(status);
         });
+    }
+
+    private bool ShouldRaiseStatus(ServiceStatus status)
+    {
+        lock (_sync)
+        {
+            if (IsSameStatus(_lastRaisedStatus, status))
+            {
+                return false;
+            }
+
+            _lastRaisedStatus = status;
+            return true;
+        }
+    }
+
+    private static bool IsSameStatus(ServiceStatus? left, ServiceStatus right)
+    {
+        return left is not null &&
+            left.HasActiveDevice == right.HasActiveDevice &&
+            left.IsLocked == right.IsLocked &&
+            left.IsPaused == right.IsPaused &&
+            left.CurrentPercent == right.CurrentPercent &&
+            left.TargetPercent == right.TargetPercent &&
+            string.Equals(left.DeviceName, right.DeviceName, StringComparison.Ordinal) &&
+            string.Equals(left.DeviceId, right.DeviceId, StringComparison.Ordinal) &&
+            string.Equals(left.HardwareSupportText, right.HardwareSupportText, StringComparison.Ordinal) &&
+            string.Equals(left.AgcStatus, right.AgcStatus, StringComparison.Ordinal) &&
+            string.Equals(left.Message, right.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class EndpointNotificationClient : IMMNotificationClient
+    {
+        private readonly MicrophoneLockService _owner;
+
+        public EndpointNotificationClient(MicrophoneLockService owner)
+        {
+            _owner = owner;
+        }
+
+        public void OnDeviceStateChanged(string deviceId, DeviceState newState)
+        {
+            _owner.RequestPoll();
+        }
+
+        public void OnDeviceAdded(string pwstrDeviceId)
+        {
+            _owner.RequestPoll();
+        }
+
+        public void OnDeviceRemoved(string deviceId)
+        {
+            _owner.RequestPoll();
+        }
+
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+        {
+            if (flow == DataFlow.Capture && role == Role.Communications)
+            {
+                _owner.RequestPoll();
+            }
+        }
+
+        public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key)
+        {
+        }
     }
 }
 
